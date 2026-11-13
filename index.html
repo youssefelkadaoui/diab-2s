@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="description" content="لعبة المستذئبون العربية — أنشئ غرفة والعب مع أصدقائك">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="ليلة الذئاب">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="application-name" content="ليلة الذئاب">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=12">
+  <title>ليلة الذئاب — المستذئبون</title>
+</head>
+<body>
+  <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
+  <header class="topbar"><a class="brand" href="#" aria-label="ليلة الذئاب"><span class="brand-mark">☾</span><span>ليلة <b>الذئاب</b></span></a><div class="top-actions"><span id="connection" class="connection"><i></i> غير متصل</span></div></header>
+  <section id="install-dialog" class="install-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="install-title">
+    <div class="install-card"><span class="install-emblem">☾</span><span class="step">ليلة الذئاب · تطبيق الهاتف</span><h2 id="install-title">القرية تنتظرك</h2><p id="install-description">ثبّت اللعبة لتفتحها من شاشة هاتفك بملء الشاشة، أو ابدأ اللعب الآن.</p><button id="install-now" class="button button-primary full">تثبيت التطبيق <span>↓</span></button><button id="play-now" class="button button-quiet full">العب الآن</button></div>
+  </section>
+  <main id="app" class="app-shell"><div class="loading"><span class="spinner"></span><p>تُفتح أبواب القرية...</p></div></main>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <footer class="site-footer">
+    <span>لعبة اجتماعية للأصدقاء</span><span class="footer-separator">·</span>
+    <span>المطوّر</span>
+    <a class="developer-link" href="https://www.youssefelkadaoui.site/" target="_blank" rel="noopener noreferrer">
+      <img src="https://www.youssefelkadaoui.site/assets/favicon.svg" alt="" width="18" height="18">
+      <span dir="ltr">youssefelkadaoui.site</span>
+    </a>
+  </footer>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    window.setTimeout(() => {
+      const app = document.getElementById('app');
+      if (app && app.querySelector('.loading')) {
+        app.innerHTML = '<section style="direction:rtl;text-align:center;padding:28px 20px;border:1px solid #ffffff20;border-radius:14px;background:#172235;color:#f4f0e8;font-family:Cairo,system-ui,sans-serif"><div style="font-size:30px;color:#e6c98f">☾</div><h2 style="font-size:18px">تعذّر تشغيل الموقع</h2><p style="color:#aab4c2;font-size:12px;line-height:2">لا تفتح index.html مباشرة. شغّل خادماً محلياً وافتح الموقع عبر <b dir="ltr">http://localhost</b>، وتأكد من اتصال الإنترنت لتحميل Supabase.</p><p style="color:#c79c59;font-size:11px">من مجلد المشروع شغّل: <code dir="ltr">python3 -m http.server 8000</code><br>ثم افتح: <code dir="ltr">http://localhost:8000</code></p></section>';
+      }
+    }, 8000);
+  </script>
+  <script type="module" src="app.js?v=12"></script>
+</body>
+</html>
