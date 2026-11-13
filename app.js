@@ -188,6 +188,7 @@ function openHostChoice(name) {
 function render() {
   if (!state) return renderHome();
   if (state.phase === 'lobby') return renderLobby();
+  if (state.phase === 'ended') return renderEnded();
   if (isNarrator()) return renderNarrator();
   return renderCard();
 }
@@ -253,11 +254,12 @@ function renderCard() {
   const player = myPlayer();
   if (!player || !player.role) { app.innerHTML = `<section class="panel waiting-panel"><span class="spinner"></span><h2>البطاقات تُخلط…</h2><p class="muted">سيظهر دورك هنا بعد التوزيع.</p></section>`; return; }
   const role = ROLES[player.role];
-  app.innerHTML = `<section class="game-head"><div><span class="step">غرفة ${state.id} <span>·</span> الجولة ${state.round}</span><h1>بطاقتك السرية</h1></div><span class="night-moon">☾</span></section><p class="reveal-instruction">اضغط مطولاً على البطاقة لتكشف دورك</p><div class="card-scene"><button class="role-card" id="role-card" aria-label="اضغط مطولاً لكشف بطاقتك"><span class="card-face card-back"><span class="card-back-moon">☾</span><span class="card-back-logo">ليلة<br><b>الذئاب</b></span><span class="card-back-runes">✦　☽　✦</span><span class="card-back-hint">اضغط مطولاً</span></span><span class="card-face card-front ${role.team === 'wolves' ? 'wolves' : ''}"><span class="card-top-label">دورك في القرية</span><span class="role-icon">${role.icon}</span><b class="role-name">${role.name}</b><span class="team-badge ${role.team}">${role.teamName}</span><span class="role-description">${role.description}</span></span></button></div><div class="card-status"><span class="status-orb"></span><span>بطاقتك مرئية لك وحدك</span></div><p class="privacy-foot">تأكد أن من حولك لا يرون الشاشة قبل الكشف.</p>`;
+  app.innerHTML = `<section class="game-head"><div><span class="step">غرفة ${state.id} <span>·</span> الجولة ${state.round}</span><h1>بطاقتك السرية</h1></div><span class="night-moon">☾</span></section><p class="reveal-instruction">اضغط مطولاً على البطاقة لتكشف دورك</p><div class="card-scene"><button class="role-card" id="role-card" aria-label="اضغط مطولاً لكشف بطاقتك"><span class="card-face card-back"><span class="card-back-moon">☾</span><span class="card-back-logo">ليلة<br><b>الذئاب</b></span><span class="card-back-runes">✦　☽　✦</span><span class="card-back-hint">اضغط مطولاً</span></span><span class="card-face card-front ${role.team === 'wolves' ? 'wolves' : ''}"><span class="card-top-label">دورك في القرية</span><span class="role-icon">${role.icon}</span><b class="role-name">${role.name}</b><span class="team-badge ${role.team}">${role.teamName}</span><span class="role-description">${role.description}</span></span></button></div><div class="card-status"><span class="status-orb"></span><span>بطاقتك مرئية لك وحدك</span></div>${session.playerId === state.hostId ? '<button id="end-game" class="button button-danger full">إنهاء اللعبة <span>■</span></button>' : ''}<p class="privacy-foot">تأكد أن من حولك لا يرون الشاشة قبل الكشف.</p>`;
   const card = $('#role-card');
   const reveal = event => { event.preventDefault(); card.classList.add('revealed'); };
   const conceal = () => card.classList.remove('revealed');
   card.addEventListener('pointerdown', reveal); ['pointerup','pointercancel','pointerleave','lostpointercapture'].forEach(type => card.addEventListener(type, conceal)); card.addEventListener('contextmenu', e => e.preventDefault());
+  if (session.playerId === state.hostId) $('#end-game').onclick = endGame;
 }
 function renderNarrator() {
   const people = state.players.filter(player => player.role);
@@ -266,10 +268,26 @@ function renderNarrator() {
   <div class="section-title"><span class="step">تسلسل الليل</span><small>نادِ الأدوار بالترتيب</small></div><div class="night-order">${activeRoles.length ? activeRoles.map((id,i)=>`<div class="night-step"><span class="order-number">${String(i+1).padStart(2,'0')}</span><span class="role-emoji">${ROLES[id].icon}</span><span>${ROLES[id].night}</span></div>`).join('') : '<p class="muted">لا توجد أدوار ليلية مختارة.</p>'}</div>
   <div class="section-title players-title"><span class="step">اللاعبون والأدوار</span><small>تظهر لك أنت فقط</small></div><div class="narrator-players">${people.map(p=>`<div class="narrator-player ${p.alive ? '' : 'dead'}"><span class="avatar ${ROLES[p.role].team}">${ROLES[p.role].icon}</span><span class="n-player-name">${escapeHtml(p.name)}<small>${ROLES[p.role].name}</small></span><div class="player-state"><button data-player="${p.id}" data-state="alive" class="state-chip ${p.alive ? 'selected' : ''}">حي</button><button data-player="${p.id}" data-state="dead" class="state-chip ${!p.alive ? 'selected' : ''}">ميت</button><button data-player="${p.id}" data-state="protected" class="state-chip ${p.protected ? 'protected' : ''}">محمي</button><button data-player="${p.id}" data-state="lovers" class="state-chip ${p.lovers ? 'lovers' : ''}">♥</button></div></div>`).join('')}</div>
   ${people.some(p=>p.role==='witch') ? `<div class="potion-box"><span class="step">جرعات الساحرة</span><div class="potion-controls"><button data-potion="life" class="potion ${state.witchPotions.life ? 'available' : ''}">♥ جرعة الحياة <b>${state.witchPotions.life ? 'متاحة' : 'استُخدمت'}</b></button><button data-potion="poison" class="potion ${state.witchPotions.poison ? 'available' : ''}">☠ جرعة السم <b>${state.witchPotions.poison ? 'متاحة' : 'استُخدمت'}</b></button></div></div>` : ''}
-  <button id="new-round" class="button button-outline full">جولة جديدة · إعادة توزيع البطاقات <span>↻</span></button></section><p class="privacy-foot">لا تعرض هذه الشاشة على اللاعبين.</p>`;
+  <button id="new-round" class="button button-outline full">جولة جديدة · إعادة توزيع البطاقات <span>↻</span></button><button id="end-game" class="button button-danger full">إنهاء اللعبة <span>■</span></button></section><p class="privacy-foot">لا تعرض هذه الشاشة على اللاعبين.</p>`;
   app.querySelectorAll('[data-player]').forEach(button => button.onclick = async () => { const player = state.players.find(p => p.id === button.dataset.player); const value = button.dataset.state; if(value==='alive') player.alive=true; if(value==='dead') player.alive=false; if(value==='protected') player.protected=!player.protected; if(value==='lovers') player.lovers=!player.lovers; await saveState(); renderNarrator(); });
   app.querySelectorAll('[data-potion]').forEach(button => button.onclick = async () => { const key=button.dataset.potion; state.witchPotions[key]=!state.witchPotions[key]; await saveState(); renderNarrator(); });
   $('#new-round').onclick = async () => { if(!confirm('إعادة توزيع البطاقات وبدء جولة جديدة؟')) return; state.players.forEach(p=>{p.role=null;p.alive=true;p.protected=false;p.lovers=false;}); state.phase='lobby'; state.soundAt=null; state.witchPotions={life:true,poison:true}; await saveState(); renderLobby(); };
+  $('#end-game').onclick = endGame;
+}
+async function endGame() {
+  if (session.playerId !== state?.hostId) return;
+  if (!confirm('هل تريد إنهاء اللعبة لجميع اللاعبين؟')) return;
+  state.phase = 'ended'; state.endedAt = Date.now();
+  await saveState(); renderEnded();
+}
+function renderEnded() {
+  const players = state.players.filter(player => player.role);
+  app.innerHTML = `<section class="game-head"><div><span class="step">انتهت الجولة ${state.round}</span><h1>انكشف سرّ القرية</h1></div><span class="night-moon">☾</span></section><section class="panel ended-panel"><p class="ended-intro">${session.playerId === state.hostId ? 'أنهيت اللعبة. هذه أدوار أهل القرية:' : 'أنهى المضيف اللعبة. هذه أدوار أهل القرية:'}</p><div class="ended-players">${players.map(player=>{const role=ROLES[player.role];return `<div class="ended-player"><span class="role-emoji">${role.icon}</span><span>${escapeHtml(player.name)}</span><b class="team-badge ${role.team}">${role.name}</b></div>`;}).join('')}</div>${session.playerId === state.hostId ? '<button id="back-to-lobby" class="button button-primary full">العودة إلى اللوبي <span>↻</span></button>' : '<p class="waiting">بانتظار المضيف لبدء جولة جديدة…</p>'}</section>`;
+  if (session.playerId === state.hostId) $('#back-to-lobby').onclick = async () => {
+    state.players.forEach(player=>{player.role=null;player.alive=true;player.protected=false;player.lovers=false;});
+    state.phase='lobby'; state.soundAt=null; state.witchPotions={life:true,poison:true};
+    await saveState(); renderLobby();
+  };
 }
 async function shareInvite() {
   const url = `${location.origin}${location.pathname}?room=${state.id}`;
