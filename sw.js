@@ -1,4 +1,4 @@
-const CACHE = 'laylat-ziab-v3';
+const CACHE = 'laylat-ziab-v5';
 const CORE = ['./', './index.html', './style.css', './app.js', './roles.js', './manifest.json', './icon.svg'];
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE)).then(() => self.skipWaiting())));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())));
