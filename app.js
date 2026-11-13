@@ -242,16 +242,9 @@ function renderCard() {
   const role = ROLES[player.role];
   app.innerHTML = `<section class="game-head"><div><span class="step">غرفة ${state.id} <span>·</span> الجولة ${state.round}</span><h1>بطاقتك السرية</h1></div><span class="night-moon">☾</span></section><p class="reveal-instruction">اضغط مطولاً على البطاقة لتكشف دورك</p><div class="card-scene"><button class="role-card" id="role-card" aria-label="اضغط مطولاً لكشف بطاقتك"><span class="card-face card-back"><span class="card-back-moon">☾</span><span class="card-back-logo">ليلة<br><b>الذئاب</b></span><span class="card-back-runes">✦　☽　✦</span><span class="card-back-hint">اضغط مطولاً</span></span><span class="card-face card-front ${role.team === 'wolves' ? 'wolves' : ''}"><span class="card-top-label">دورك في القرية</span><span class="role-image-frame"><img class="role-image" src="${role.image}" alt="${role.name}"></span><b class="role-name">${role.name}</b><span class="team-badge ${role.team}">${role.teamName}</span><span class="role-description">${role.description}</span></span></button></div><div class="card-status"><span class="status-orb"></span><span>بطاقتك مرئية لك وحدك</span></div>${session.playerId === state.hostId ? '<button id="end-game" class="button button-danger full">إنهاء اللعبة <span>■</span></button>' : ''}<p class="privacy-foot">تأكد أن من حولك لا يرون الشاشة قبل الكشف.</p>`;
   const card = $('#role-card');
-  let revealTimer;
-  const reveal = event => {
-    event.preventDefault();
-    clearTimeout(revealTimer);
-    revealTimer = setTimeout(() => card.classList.add('revealed'), 220);
-  };
-  const conceal = () => { clearTimeout(revealTimer); card.classList.remove('revealed'); };
-  card.addEventListener('pointerdown', reveal);
-  ['pointerup','pointercancel','pointerleave','lostpointercapture'].forEach(type => card.addEventListener(type, conceal));
-  card.addEventListener('contextmenu', e => e.preventDefault());
+  const reveal = event => { event.preventDefault(); card.classList.add('revealed'); };
+  const conceal = () => card.classList.remove('revealed');
+  card.addEventListener('pointerdown', reveal); ['pointerup','pointercancel','pointerleave','lostpointercapture'].forEach(type => card.addEventListener(type, conceal)); card.addEventListener('contextmenu', e => e.preventDefault());
   if (session.playerId === state.hostId) $('#end-game').onclick = endGame;
 }
 function renderNarrator() {
@@ -275,8 +268,8 @@ async function endGame() {
 }
 function renderEnded() {
   const players = state.players.filter(player => player.role);
-  app.innerHTML = `<section class="game-head"><div><span class="step">انتهت الجولة ${state.round}</span><h1>انكشف سرّ القرية</h1></div><span class="night-moon">☾</span></section><section class="panel ended-panel"><p class="ended-intro">${session.playerId === state.hostId ? 'أنهيت اللعبة. هذه أدوار أهل القرية:' : 'أنهى المضيف اللعبة. هذه أدوار أهل القرية:'}</p><div class="ended-players">${players.map(player=>{const role=ROLES[player.role];return `<div class="ended-player"><span class="role-emoji">${role.icon}</span><span>${escapeHtml(player.name)}</span><b class="team-badge ${role.team}">${role.name}</b></div>`;}).join('')}</div>${session.playerId === state.hostId ? '<button id="back-to-room" class="button button-primary full">العودة إلى الغرفة <span>↻</span></button>' : '<p class="waiting">بانتظار المضيف لبدء جولة جديدة…</p>'}</section>`;
-  if (session.playerId === state.hostId) $('#back-to-room').onclick = async () => {
+  app.innerHTML = `<section class="game-head"><div><span class="step">انتهت الجولة ${state.round}</span><h1>انكشف سرّ القرية</h1></div><span class="night-moon">☾</span></section><section class="panel ended-panel"><p class="ended-intro">${session.playerId === state.hostId ? 'أنهيت اللعبة. هذه أدوار أهل القرية:' : 'أنهى المضيف اللعبة. هذه أدوار أهل القرية:'}</p><div class="ended-players">${players.map(player=>{const role=ROLES[player.role];return `<div class="ended-player"><span class="role-emoji">${role.icon}</span><span>${escapeHtml(player.name)}</span><b class="team-badge ${role.team}">${role.name}</b></div>`;}).join('')}</div>${session.playerId === state.hostId ? '<button id="back-to-lobby" class="button button-primary full">العودة إلى اللوبي <span>↻</span></button>' : '<p class="waiting">بانتظار المضيف لبدء جولة جديدة…</p>'}</section>`;
+  if (session.playerId === state.hostId) $('#back-to-lobby').onclick = async () => {
     state.players.forEach(player=>{player.role=null;player.alive=true;player.protected=false;player.lovers=false;});
     state.phase='lobby'; state.soundAt=null; state.witchPotions={life:true,poison:true};
     await saveState(); renderLobby();
@@ -292,11 +285,7 @@ async function shareInvite() {
 async function leaveRoom() { clearInterval(heartbeatTimer); if (state) { const p=myPlayer(); if(p) { p.connected=false; p.lastSeen=0; } await saveState(); } if(channel) client?.removeChannel(channel); state=null; session.roomId=''; session.isHost=false; persist(); renderHome(); }
 
 async function init() {
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
-      .then(registration => registration.update())
-      .catch(console.warn);
-  }
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js').catch(console.warn);
   setTimeout(showInstallChoice, 800);
   if (!client) { renderHome(session.roomId); setConnection(false, 'أضف إعدادات Supabase'); return; }
   if (session.roomId) { session.playerName = session.playerName || ''; if (!session.playerName) { renderHome(session.roomId); notify('اكتب اسمك للانضمام إلى الغرفة.'); } else loadRoom(session.roomId); }
