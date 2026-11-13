@@ -11,7 +11,7 @@ const client = window.supabase && SUPABASE_URL.includes('https://') && !SUPABASE
 const params = new URLSearchParams(location.search);
 const saved = (() => { try { return JSON.parse(localStorage.getItem('laylat-session') || '{}'); } catch { return {}; } })();
 const session = { roomId: params.get('room')?.toUpperCase() || saved.roomId || '', playerId: saved.playerId || crypto.randomUUID(), playerName: saved.playerName || '', isHost: !!saved.isHost };
-let state = null, channel = null, toastTimer = null, heartbeatTimer = null;
+let state = null, channel = null, toastTimer = null, heartbeatTimer = null, audioContext = null;
 
 document.addEventListener('copy', event => { event.preventDefault(); notify('النسخ غير متاح داخل اللعبة.'); });
 document.addEventListener('cut', event => { event.preventDefault(); notify('القص غير متاح داخل اللعبة.'); });
@@ -21,6 +21,7 @@ document.addEventListener('contextmenu', event => {
 document.addEventListener('keydown', event => {
   if ((event.ctrlKey || event.metaKey) && ['c', 'x'].includes(event.key.toLowerCase())) event.preventDefault();
 });
+document.addEventListener('pointerdown', () => { unlockWolfAudio(); }, { capture: true });
 
 function persist() { localStorage.setItem('laylat-session', JSON.stringify(session)); }
 function notify(message) { const el = $('#toast'); el.textContent = message; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 6000); }
@@ -34,6 +35,54 @@ function myPlayer() { return state?.players.find(player => player.id === session
 function connectedPlayers() { return (state?.players || []).filter(player => player.connected !== false && (!player.lastSeen || Date.now() - player.lastSeen < 45000)); }
 function isNarrator() { return state && state.hostId === session.playerId && state.hostMode === 'narrator'; }
 function roleCount(deck = state.deck) { return Number(deck.werewolf || 0) + Number(deck.villager || 0) + UNIQUE_ROLE_IDS.filter(id => deck[id]).length; }
+async function unlockWolfAudio() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return false;
+  try {
+    audioContext ||= new AudioContextClass();
+    if (audioContext.state !== 'running') await audioContext.resume();
+    const button = $('#enable-sound');
+    if (button && audioContext.state === 'running') {
+      button.textContent = '✓ صوت الذئب مفعّل على هذا الهاتف';
+      button.classList.add('sound-ready');
+    }
+    return audioContext.state === 'running';
+  } catch (error) { console.warn('Audio could not be enabled:', error); return false; }
+}
+function playWolfHowlAt(timestamp) {
+  if (!audioContext || audioContext.state !== 'running') return;
+  const startAt = audioContext.currentTime + Math.max(0, timestamp - Date.now()) / 1000;
+  const main = audioContext.createOscillator();
+  const overtone = audioContext.createOscillator();
+  const filter = audioContext.createBiquadFilter();
+  const volume = audioContext.createGain();
+  const vibrato = audioContext.createOscillator();
+  const vibratoDepth = audioContext.createGain();
+  const echo = audioContext.createDelay(0.6);
+  const feedback = audioContext.createGain();
+  const echoVolume = audioContext.createGain();
+  main.type = 'triangle';
+  overtone.type = 'sine';
+  filter.type = 'bandpass'; filter.frequency.setValueAtTime(640, startAt); filter.Q.setValueAtTime(0.7, startAt);
+  main.frequency.setValueAtTime(235, startAt);
+  main.frequency.exponentialRampToValueAtTime(460, startAt + 1.15);
+  main.frequency.exponentialRampToValueAtTime(345, startAt + 1.9);
+  main.frequency.exponentialRampToValueAtTime(205, startAt + 4.2);
+  overtone.frequency.setValueAtTime(470, startAt);
+  overtone.frequency.exponentialRampToValueAtTime(920, startAt + 1.15);
+  overtone.frequency.exponentialRampToValueAtTime(410, startAt + 4.2);
+  vibrato.frequency.setValueAtTime(5.2, startAt); vibratoDepth.gain.setValueAtTime(8, startAt);
+  vibrato.connect(vibratoDepth); vibratoDepth.connect(main.frequency);
+  volume.gain.setValueAtTime(0.0001, startAt);
+  volume.gain.exponentialRampToValueAtTime(0.22, startAt + 0.55);
+  volume.gain.setValueAtTime(0.18, startAt + 2.7);
+  volume.gain.exponentialRampToValueAtTime(0.0001, startAt + 4.35);
+  echo.delayTime.setValueAtTime(0.34, startAt); feedback.gain.setValueAtTime(0.2, startAt); echoVolume.gain.setValueAtTime(0.2, startAt);
+  main.connect(filter); overtone.connect(filter); filter.connect(volume); volume.connect(audioContext.destination);
+  volume.connect(echo); echo.connect(echoVolume); echoVolume.connect(audioContext.destination); echo.connect(feedback); feedback.connect(echo);
+  [main, overtone, vibrato].forEach(oscillator => oscillator.start(startAt));
+  [main, overtone, vibrato].forEach(oscillator => oscillator.stop(startAt + 4.5));
+}
 
 async function ensureSupabase() {
   if (!client) { setConnection(false, 'أضف إعدادات Supabase'); return false; }
@@ -73,7 +122,12 @@ function startHeartbeat() {
 function subscribe(code) {
   if (channel) client.removeChannel(channel);
   channel = client.channel(`room-${code}`).on('postgres_changes', { event: '*', schema: 'public', table: TABLE, filter: `id=eq.${code}` }, payload => {
-    if (payload.new?.state) { state = payload.new.state; render(); }
+    if (payload.new?.state) {
+      const wasLobby = state?.phase === 'lobby';
+      state = payload.new.state;
+      if (wasLobby && state.phase === 'game' && state.soundAt) playWolfHowlAt(state.soundAt);
+      render();
+    }
   }).subscribe(status => { setConnection(status === 'SUBSCRIBED'); });
 }
 async function createRoom(name, hostMode) {
@@ -137,11 +191,12 @@ function renderLobby() {
   const waitingForNarratedPlayers = state.hostMode === 'narrator' && required === 0;
   const deck = state.deck;
   app.innerHTML = `<section class="room-top"><button class="back-link" id="leave">← خروج</button><span class="room-label">غرفة خاصة <span class="live-dot"></span></span></section>
-  <section class="panel room-panel"><div class="room-code-block"><div><span class="step">رمز الدعوة</span><div class="room-code" dir="ltr">${state.id}</div></div><button id="share-link" class="icon-button" aria-label="مشاركة رابط الدعوة">↗</button></div><button id="share-text" class="button button-outline full">مشاركة رابط الدعوة <span>↗</span></button>
+  <section class="panel room-panel"><div class="room-code-block"><div><span class="step">رمز الدعوة</span><div class="room-code" dir="ltr">${state.id}</div></div><button id="share-link" class="icon-button" aria-label="مشاركة رابط الدعوة">↗</button></div><button id="share-text" class="button button-outline full">مشاركة رابط الدعوة <span>↗</span></button><button id="enable-sound" class="sound-enable ${audioContext?.state === 'running' ? 'sound-ready' : ''}" aria-pressed="${audioContext?.state === 'running' ? 'true' : 'false'}">${audioContext?.state === 'running' ? '✓ صوت الذئب مفعّل على هذا الهاتف' : '♫ فعّل صوت الذئب على هذا الهاتف'}</button>
   <div class="player-header"><div><span class="step">في انتظار اكتمال المجموعة</span><h2>أهل القرية <span class="player-count">${people.length}</span></h2></div><span class="players-symbol">♙</span></div><div class="player-list">${people.map((p, i) => `<div class="player-row"><span class="avatar ${p.id === state.hostId ? 'host-avatar' : ''}">${escapeHtml((p.name || '?').trim().charAt(0))}</span><span class="player-name">${escapeHtml(p.name)}${p.id === session.playerId ? ' <small>(أنت)</small>' : ''}</span>${p.id === state.hostId ? '<span class="host-tag">المضيف</span>' : ''}<span class="ready-dot"></span></div>`).join('')}</div>
   ${session.playerId === state.hostId ? `<div class="deck-head"><span class="step">تشكيلة الجولة</span><span class="deck-total ${ready ? 'matched' : ''}">${count} <small>${waitingForNarratedPlayers ? 'بطاقة · بانتظار اللاعبين' : `/ ${required} بطاقة`}</small></span></div><div class="role-config">${roleControl('werewolf', deck.werewolf, 'counter')}${roleControl('villager', deck.villager, 'counter')}${UNIQUE_ROLE_IDS.map(id => roleControl(id, deck[id], 'toggle')).join('')}</div><p class="match-hint ${ready ? 'hint-ready' : ''}">${waitingForNarratedPlayers ? 'الغرفة جاهزة؛ شارك رابط الدعوة. الراوي لا يأخذ بطاقة.' : ready ? '✓ التشكيلة تطابق عدد اللاعبين' : count > required ? 'قلّل البطاقات أو أضف لاعباً' : `اختر ${required - count} بطاقة إضافية`}</p><button id="start-game" class="button button-primary full start-button" ${ready ? '' : 'disabled'}>توزيع البطاقات <span>✦</span></button>` : `<div class="waiting"><span class="spinner"></span> المضيف يجهّز التشكيلة…</div>`}
   </section><p class="home-footnote">${state.hostMode === 'narrator' ? 'أنت تلعب دور الراوي' : 'أنت تلعب مع المجموعة'} <span>·</span> لا تغلق الصفحة أثناء التوزيع</p>`;
   $('#leave').onclick = leaveRoom; $('#share-link').onclick = shareInvite; $('#share-text').onclick = shareInvite;
+  $('#enable-sound').onclick = async () => { if (!await unlockWolfAudio()) notify('تعذّر تفعيل الصوت في هذا المتصفح.'); };
   if (session.playerId === state.hostId) {
     app.querySelectorAll('[data-role-action]').forEach(button => button.onclick = () => changeDeck(button.dataset.roleAction, button.dataset.kind === 'counter' ? Number(button.dataset.delta) : null));
     $('#start-game').onclick = distribute;
@@ -181,8 +236,8 @@ async function distribute() {
   // Generate a fresh secure shuffle of roles and player order for every deal.
   shuffle(deck);
   shuffle(players).forEach((player, i) => { player.role = deck[i]; player.alive = true; player.protected = false; player.lovers = false; });
-  state.phase = 'game'; state.round++; state.witchPotions = { life: true, poison: true }; state.players.filter(p => !players.some(player => player.id === p.id)).forEach(p => { p.role = null; });
-  await saveState(); render();
+  state.phase = 'game'; state.round++; state.soundAt = Date.now() + 2500; state.witchPotions = { life: true, poison: true }; state.players.filter(p => !players.some(player => player.id === p.id)).forEach(p => { p.role = null; });
+  await saveState(); playWolfHowlAt(state.soundAt); render();
 }
 
 function renderCard() {
@@ -205,7 +260,7 @@ function renderNarrator() {
   <button id="new-round" class="button button-outline full">جولة جديدة · إعادة توزيع البطاقات <span>↻</span></button></section><p class="privacy-foot">لا تعرض هذه الشاشة على اللاعبين.</p>`;
   app.querySelectorAll('[data-player]').forEach(button => button.onclick = async () => { const player = state.players.find(p => p.id === button.dataset.player); const value = button.dataset.state; if(value==='alive') player.alive=true; if(value==='dead') player.alive=false; if(value==='protected') player.protected=!player.protected; if(value==='lovers') player.lovers=!player.lovers; await saveState(); renderNarrator(); });
   app.querySelectorAll('[data-potion]').forEach(button => button.onclick = async () => { const key=button.dataset.potion; state.witchPotions[key]=!state.witchPotions[key]; await saveState(); renderNarrator(); });
-  $('#new-round').onclick = async () => { if(!confirm('إعادة توزيع البطاقات وبدء جولة جديدة؟')) return; state.players.forEach(p=>{p.role=null;p.alive=true;p.protected=false;p.lovers=false;}); state.phase='lobby'; state.witchPotions={life:true,poison:true}; await saveState(); renderLobby(); };
+  $('#new-round').onclick = async () => { if(!confirm('إعادة توزيع البطاقات وبدء جولة جديدة؟')) return; state.players.forEach(p=>{p.role=null;p.alive=true;p.protected=false;p.lovers=false;}); state.phase='lobby'; state.soundAt=null; state.witchPotions={life:true,poison:true}; await saveState(); renderLobby(); };
 }
 async function shareInvite() {
   const url = `${location.origin}${location.pathname}?room=${state.id}`;
