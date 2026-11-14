@@ -245,7 +245,11 @@ function renderCard() {
   app.innerHTML = `<section class="game-head"><div><span class="step">غرفة ${state.id} <span>·</span> الجولة ${state.round}</span><h1>بطاقتك السرية</h1></div><span class="night-moon">☾</span></section><p class="reveal-instruction">اضغط على البطاقة لعرض دورك، واضغط مجدداً لإخفائه</p><div class="card-scene"><button class="role-card" id="role-card" aria-label="اضغط لعرض بطاقتك أو إخفائها"><span class="card-face card-back"><span class="card-back-moon">☾</span><span class="card-back-logo">ليلة<br><b>الذئاب</b></span><span class="card-back-runes">✦　☽　✦</span><span class="card-back-hint">اضغط لعرض البطاقة</span></span><span class="card-face card-front ${role.team === 'wolves' ? 'wolves' : ''}"><span class="card-top-label">دورك في القرية</span><span class="role-image-frame"><img class="role-image" src="${role.image}" alt="${role.name}"></span><b class="role-name">${role.name}</b><span class="team-badge ${role.team}">${role.teamName}</span><span class="role-description">${role.description}</span></span></button></div><div class="card-status"><span class="status-orb"></span><span>بطاقتك مرئية لك وحدك</span></div>${session.playerId === state.hostId ? '<button id="end-game" class="button button-danger full">إنهاء اللعبة <span>■</span></button>' : ''}<p class="privacy-foot">تأكد أن من حولك لا يرون الشاشة قبل الكشف.</p>`;
   const card = $('#role-card');
   card.setAttribute('aria-label', 'اضغط لعرض بطاقتك أو إخفائها');
-  card.addEventListener('click', () => card.classList.toggle('revealed'));
+  card.setAttribute('aria-pressed', 'false');
+  card.addEventListener('click', () => {
+    const revealed = card.classList.toggle('revealed');
+    card.setAttribute('aria-pressed', String(revealed));
+  });
   card.addEventListener('contextmenu', e => e.preventDefault());
   if (session.playerId === state.hostId) $('#end-game').onclick = endGame;
 }
